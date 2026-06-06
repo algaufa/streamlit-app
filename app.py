@@ -310,7 +310,7 @@ calc_config = get_calc_config(flat_id)
 if not df_hist.empty:
     last_date = df_hist["Дата"].max()
     last_total = df_hist[df_hist["Дата"] == last_date]["Сумма_руб"].sum()
-    st.markdown(f"### Последний расчёт: {last_total:.2f} руб. {last_date}")
+    st.markdown(f"### Последний расчёт: {last_total:.2f} {last_date}")
 else:
     st.markdown("### Последний расчёт: нет данных")
 
@@ -680,15 +680,18 @@ else:
                 last_val = get_last_meter_value(df_hist, name)
                 _, s_color = get_service_meta(df_serv, name)
 
-                # Заголовок с цветной полосой
+                # Заголовок с цветной полосой и фиксированной высотой
                 if ":" in active_tariff_str:
-                    # Динамический тариф: слово «Динам.» с title-подсказкой
-                    tariff_display = f'<span title="{active_tariff_str}">Динам.</span>'
+                    # Динамический тариф с интерактивной подсказкой через <details>
+                    tariff_display = f'''Динам. <details style="display:inline;">
+                        <summary style="display:inline; cursor:pointer; color:#555;">ⓘ</summary>
+                        <span style="font-size:0.9em;">{active_tariff_str}</span>
+                    </details>'''
                 else:
                     tariff_display = active_tariff_str
 
                 html_block = f"""
-                <div style="min-height: 80px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
+                <div style="height: 120px; overflow-y: auto; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                     <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
                     <span style="font-size: 13px; color: inherit;"><b>Тариф:</b> {tariff_display}</span>
                 </div>
