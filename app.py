@@ -336,7 +336,6 @@ else:
     unique_services = []
 
 # ====================== БОКОВАЯ ПАНЕЛЬ ======================
-# (код боковой панели без изменений)
 with st.sidebar:
     st.markdown("## 🏠 Управление квартирами")
     with st.expander("🏠 Квартиры", expanded=False):
@@ -376,21 +375,35 @@ with st.sidebar:
                     save_flats(flats_df)
                     st.rerun()
 
+        # Двухэтапное удаление квартиры
+        if "confirm_delete_flat" not in st.session_state:
+            st.session_state.confirm_delete_flat = None
         if st.button("🗑️ Удалить текущую квартиру", type="primary"):
-            flat_to_delete = flat_id
-            serv_file, hist_file, calc_file = get_flat_files(flat_to_delete)
-            notes_file = get_notes_file(flat_to_delete)
-            for f in [serv_file, hist_file, calc_file, notes_file]:
-                if os.path.exists(f):
-                    os.remove(f)
-            flats_df = flats_df[flats_df["ID"] != flat_to_delete]
-            flats_df["Порядок"] = range(1, len(flats_df)+1)
-            save_flats(flats_df)
-            if not flats_df.empty:
-                st.session_state.selected_flat_id = flats_df.iloc[0]["ID"]
-            else:
-                st.session_state.selected_flat_id = None
-            st.rerun()
+            st.session_state.confirm_delete_flat = flat_id
+        if st.session_state.confirm_delete_flat == flat_id:
+            st.warning("Вы уверены, что хотите удалить эту квартиру и все её данные?")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ Да, удалить", key="confirm_delete_flat_yes"):
+                    flat_to_delete = flat_id
+                    serv_file, hist_file, calc_file = get_flat_files(flat_to_delete)
+                    notes_file = get_notes_file(flat_to_delete)
+                    for f in [serv_file, hist_file, calc_file, notes_file]:
+                        if os.path.exists(f):
+                            os.remove(f)
+                    flats_df = flats_df[flats_df["ID"] != flat_to_delete]
+                    flats_df["Порядок"] = range(1, len(flats_df)+1)
+                    save_flats(flats_df)
+                    st.session_state.confirm_delete_flat = None
+                    if not flats_df.empty:
+                        st.session_state.selected_flat_id = flats_df.iloc[0]["ID"]
+                    else:
+                        st.session_state.selected_flat_id = None
+                    st.rerun()
+            with col_no:
+                if st.button("❌ Отмена", key="confirm_delete_flat_no"):
+                    st.session_state.confirm_delete_flat = None
+                    st.rerun()
 
         if st.session_state.get("rename_flat"):
             current_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
@@ -411,7 +424,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🛠️ Настройки услуг")
 
-    # (все expander'ы с настройками остаются без изменений)
     with st.expander("⚙️ Расчётные услуги (зависимые)", expanded=False):
         st.markdown("**Выберите услугу и задайте, от каких услуг она зависит.**")
         if not unique_services:
@@ -433,9 +445,10 @@ with st.sidebar:
                     new_config[calc_service] = selected_sources
                 save_calc_config(new_config, flat_id)
                 calc_config = new_config
-                df_hist = get_history(flat_id)
-                df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
-                save_history(df_hist, flat_id)
+                with st.spinner("Пересчёт истории..."):
+                    df_hist = get_history(flat_id)
+                    df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
+                    save_history(df_hist, flat_id)
                 st.success("Настройки сохранены, история пересчитана!")
                 st.rerun()
 
@@ -471,9 +484,10 @@ with st.sidebar:
                             st.stop()
                         else:
                             df_serv.loc[df_serv["Услуга"] == selected_service, "Услуга"] = new_name
-                            df_hist = get_history(flat_id)
-                            df_hist.loc[df_hist["Услуга"] == selected_service, "Услуга"] = new_name
-                            save_history(df_hist, flat_id)
+                            with st.spinner("Пересчёт истории..."):
+                                df_hist = get_history(flat_id)
+                                df_hist.loc[df_hist["Услуга"] == selected_service, "Услуга"] = new_name
+                                save_history(df_hist, flat_id)
                             new_calc = {}
                             for k, v in calc_config.items():
                                 if k == selected_service:
@@ -496,9 +510,10 @@ with st.sidebar:
                         }
                         df_serv = pd.concat([df_serv, pd.DataFrame([new_entry])], ignore_index=True)
                     save_services(df_serv, flat_id)
-                    df_hist = get_history(flat_id)
-                    df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
-                    save_history(df_hist, flat_id)
+                    with st.spinner("Пересчёт истории..."):
+                        df_hist = get_history(flat_id)
+                        df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
+                        save_history(df_hist, flat_id)
                     st.success("Настройки сохранены, история пересчитана!")
                     st.rerun()
 
@@ -517,9 +532,10 @@ with st.sidebar:
                     if len(idx_drop) > 0:
                         df_serv = df_serv.drop(idx_drop)
                         save_services(df_serv, flat_id)
-                        df_hist = get_history(flat_id)
-                        df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
-                        save_history(df_hist, flat_id)
+                        with st.spinner("Пересчёт истории..."):
+                            df_hist = get_history(flat_id)
+                            df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
+                            save_history(df_hist, flat_id)
                         st.success("Тариф удалён, история пересчитана!")
                         st.rerun()
 
@@ -548,8 +564,9 @@ with st.sidebar:
                             "Расход": 0.0, "Тариф": "Старт", "Сумма_руб": 0.0, "Показания": new_val
                         }])
                         df_hist = pd.concat([df_hist, df_init_entry], ignore_index=True)
-                        df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
-                        save_history(df_hist, flat_id)
+                        with st.spinner("Пересчёт истории..."):
+                            df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
+                            save_history(df_hist, flat_id)
                         st.success("Услуга создана!")
                         st.rerun()
 
@@ -587,39 +604,40 @@ with st.sidebar:
             uploaded_zip = st.file_uploader("Выберите ZIP-архив", type="zip", key="backup_zip_uploader")
             if uploaded_zip is not None:
                 if st.button("🔄 Восстановить из ZIP"):
-                    try:
-                        with zipfile.ZipFile(uploaded_zip, "r") as zf:
-                            required = ["services.csv", "history.csv", "calc_config.csv"]
-                            if not all(f in zf.namelist() for f in required):
-                                st.error("В архиве отсутствуют необходимые файлы (services.csv, history.csv, calc_config.csv)")
-                            else:
-                                zf.extractall(path=".")
-                                for f in required:
-                                    if os.path.exists(f):
-                                        target = f.replace(".csv", f"_{flat_id}.csv")
-                                        if os.path.exists(target):
-                                            os.remove(target)
-                                        os.rename(f, target)
-                                if "flat_info.txt" in zf.namelist():
-                                    with open("flat_info.txt", "r", encoding="utf-8-sig") as f:
-                                        new_name = f.read().strip()
-                                    if new_name:
-                                        flats_df = get_flats()
-                                        flats_df.loc[flats_df["ID"] == flat_id, "Название"] = new_name
-                                        save_flats(flats_df)
-                                if "notes.txt" in zf.namelist():
-                                    with open("notes.txt", "r", encoding="utf-8-sig") as f:
-                                        notes_text = f.read()
-                                    save_notes(flat_id, notes_text)
-                                df_serv = get_services(flat_id)
-                                df_hist = get_history(flat_id)
-                                calc_config = get_calc_config(flat_id)
-                                df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
-                                save_history(df_hist, flat_id)
-                                st.success("Данные успешно восстановлены! Страница перезагрузится.")
-                                st.rerun()
-                    except Exception as e:
-                        st.error(f"Ошибка при восстановлении ZIP: {e}")
+                    with st.spinner("Восстановление данных..."):
+                        try:
+                            with zipfile.ZipFile(uploaded_zip, "r") as zf:
+                                required = ["services.csv", "history.csv", "calc_config.csv"]
+                                if not all(f in zf.namelist() for f in required):
+                                    st.error("В архиве отсутствуют необходимые файлы (services.csv, history.csv, calc_config.csv)")
+                                else:
+                                    zf.extractall(path=".")
+                                    for f in required:
+                                        if os.path.exists(f):
+                                            target = f.replace(".csv", f"_{flat_id}.csv")
+                                            if os.path.exists(target):
+                                                os.remove(target)
+                                            os.rename(f, target)
+                                    if "flat_info.txt" in zf.namelist():
+                                        with open("flat_info.txt", "r", encoding="utf-8-sig") as f:
+                                            new_name = f.read().strip()
+                                        if new_name:
+                                            flats_df = get_flats()
+                                            flats_df.loc[flats_df["ID"] == flat_id, "Название"] = new_name
+                                            save_flats(flats_df)
+                                    if "notes.txt" in zf.namelist():
+                                        with open("notes.txt", "r", encoding="utf-8-sig") as f:
+                                            notes_text = f.read()
+                                        save_notes(flat_id, notes_text)
+                                    df_serv = get_services(flat_id)
+                                    df_hist = get_history(flat_id)
+                                    calc_config = get_calc_config(flat_id)
+                                    df_hist = recalc_all_sequential(df_hist, df_serv, calc_config)
+                                    save_history(df_hist, flat_id)
+                                    st.success("Данные успешно восстановлены! Страница перезагрузится.")
+                                    st.rerun()
+                        except Exception as e:
+                            st.error(f"Ошибка при восстановлении ZIP: {e}")
         else:
             st.info("Вставьте содержимое CSV-файлов вручную. Название квартиры и заметки — опционально.")
             txt_serv = st.text_area("services.csv", height=150, key=f"restore_serv_{flat_id}")
@@ -629,42 +647,42 @@ with st.sidebar:
             txt_notes = st.text_area("notes.txt (опционально)", height=100, key=f"restore_notes_{flat_id}")
             if txt_serv and txt_hist and txt_calc:
                 if st.button("🔄 Восстановить из текста", key=f"restore_btn_{flat_id}"):
-                    try:
-                        df_serv_rest = pd.read_csv(io.StringIO(txt_serv), dtype={"Тариф": str, "Услуга": str})
-                        df_hist_rest = pd.read_csv(io.StringIO(txt_hist), dtype={"Услуга": str, "Тариф": str})
-                        df_calc_rest = pd.read_csv(io.StringIO(txt_calc), dtype=str)
-                        if not {"Услуга","Тариф","Дата_начала","Порядок","Цвет"}.issubset(df_serv_rest.columns):
-                            st.error("services.csv некорректен.")
-                        elif not {"Дата","Услуга","Расход","Тариф","Сумма_руб","Показания"}.issubset(df_hist_rest.columns):
-                            st.error("history.csv некорректен.")
-                        elif not {"Расчётная услуга","Исходная услуга"}.issubset(df_calc_rest.columns):
-                            st.error("calc_config.csv некорректен.")
-                        else:
-                            save_services(df_serv_rest, flat_id)
-                            save_history(df_hist_rest, flat_id)
-                            restored_calc = {}
-                            for _, row in df_calc_rest.iterrows():
-                                t = row["Расчётная услуга"].strip()
-                                s = row["Исходная услуга"].strip()
-                                restored_calc.setdefault(t, []).append(s)
-                            save_calc_config(restored_calc, flat_id)
-                            if txt_flat_name.strip():
-                                flats_df = get_flats()
-                                flats_df.loc[flats_df["ID"] == flat_id, "Название"] = txt_flat_name.strip()
-                                save_flats(flats_df)
-                            if txt_notes.strip():
-                                save_notes(flat_id, txt_notes.strip())
-                            st.success("Данные восстановлены!")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Ошибка: {e}")
+                    with st.spinner("Восстановление данных..."):
+                        try:
+                            df_serv_rest = pd.read_csv(io.StringIO(txt_serv), dtype={"Тариф": str, "Услуга": str})
+                            df_hist_rest = pd.read_csv(io.StringIO(txt_hist), dtype={"Услуга": str, "Тариф": str})
+                            df_calc_rest = pd.read_csv(io.StringIO(txt_calc), dtype=str)
+                            if not {"Услуга","Тариф","Дата_начала","Порядок","Цвет"}.issubset(df_serv_rest.columns):
+                                st.error("services.csv некорректен.")
+                            elif not {"Дата","Услуга","Расход","Тариф","Сумма_руб","Показания"}.issubset(df_hist_rest.columns):
+                                st.error("history.csv некорректен.")
+                            elif not {"Расчётная услуга","Исходная услуга"}.issubset(df_calc_rest.columns):
+                                st.error("calc_config.csv некорректен.")
+                            else:
+                                save_services(df_serv_rest, flat_id)
+                                save_history(df_hist_rest, flat_id)
+                                restored_calc = {}
+                                for _, row in df_calc_rest.iterrows():
+                                    t = row["Расчётная услуга"].strip()
+                                    s = row["Исходная услуга"].strip()
+                                    restored_calc.setdefault(t, []).append(s)
+                                save_calc_config(restored_calc, flat_id)
+                                if txt_flat_name.strip():
+                                    flats_df = get_flats()
+                                    flats_df.loc[flats_df["ID"] == flat_id, "Название"] = txt_flat_name.strip()
+                                    save_flats(flats_df)
+                                if txt_notes.strip():
+                                    save_notes(flat_id, txt_notes.strip())
+                                st.success("Данные восстановлены!")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Ошибка: {e}")
 
 # ====================== ВВОД ПОКАЗАНИЙ ======================
 st.markdown("### 📝 Внести новые показания за период")
 if not unique_services:
     st.info("Список услуг пуст.")
 else:
-    # ... (остальной код ввода показаний без изменений)
     st.markdown("""
         <style>
         div[data-testid="stNumberInput"] input {
@@ -757,7 +775,8 @@ else:
 
             df_new = pd.DataFrame(new_rows)
             df_hist_updated = pd.concat([df_hist_updated, df_new], ignore_index=True)
-            df_hist_updated = recalc_all_sequential(df_hist_updated, df_serv, calc_config)
+            with st.spinner("Пересчёт..."):
+                df_hist_updated = recalc_all_sequential(df_hist_updated, df_serv, calc_config)
             save_history(df_hist_updated, flat_id)
 
             st.success("Данные добавлены и пересчитаны!")
