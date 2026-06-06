@@ -846,13 +846,12 @@ else:
         st.markdown("### 📋 Детализация расчёта")
         detail_date = st.selectbox("Выберите дату для просмотра деталей:", result_df.index.tolist(), key="detail_date_select")
         if detail_date:
-            # Загружаем актуальную историю
             df_detail = get_history(flat_id)
             df_detail = df_detail[df_detail["Дата"] == detail_date]
             if not df_detail.empty:
-                # Строим таблицу
                 detail_rows = []
                 total = 0.0
+                dynamic_tariffs = []  # для отображения под таблицей
                 for srv in unique_services:
                     srv_df = df_detail[df_detail["Услуга"] == srv]
                     if not srv_df.empty:
@@ -863,70 +862,88 @@ else:
                         tariff_str = row_data["Тариф"]
                         cost = row_data["Сумма_руб"]
                     else:
-                        # Если услуги нет в выбранную дату, берём последние доступные данные
                         last_row = df_detail[df_detail["Услуга"] == srv].tail(1)
                         if not last_row.empty:
                             current = last_row["Показания"].values[0]
-                            prev = current  # если нет расхода, предыдущее = текущее
+                            prev = current
                             tariff_str = last_row["Тариф"].values[0]
                             cost = 0.0
                         else:
                             current = prev = tariff_str = cost = 0.0
-                    # Форматируем тариф
-                    if ":" in str(tariff_str):
-                        tariff_display = f'Динам. <details style="display:inline;"><summary style="cursor:pointer;">ⓘ</summary>{tariff_str}</details>'
-                    else:
-                        tariff_display = tariff_str
+
+                    # Определяем, динамический ли тариф
+                    is_dynamic = ":" in str(tariff_str)
                     detail_rows.append({
                         "Услуга": srv,
-                        "Предыдущее": round(prev, 2),
-                        "Текущее": round(current, 2),
-                        "Тариф": tariff_display,
-                        "Стоимость": round(cost, 2)
+                        "Предыдущее": f"{prev:.2f}",
+                        "Текущее": f"{current:.2f}",
+                        "Тариф": "Динам. ⓘ" if is_dynamic else tariff_str,
+                        "Стоимость": f"{cost:.2f}"
                     })
+                    if is_dynamic:
+                        dynamic_tariffs.append(f"{srv}: {tariff_str}")
                     total += cost
 
-                detail_df = pd.DataFrame(detail_rows)
-                # Убираем колонку Тариф как HTML, отрендерим отдельно через st.markdown
-                st.write("**Дата:**", detail_date)
-                st.write("**Показания и стоимость:**")
-                for _, row in detail_df.iterrows():
-                    cols = st.columns([3,1,1,2,1])
-                    cols[0].write(row["Услуга"])
-                    cols[1].write(row["Предыдущее"])
-                    cols[2].write(row["Текущее"])
-                    # Тариф с возможным details
-                    if "Динам." in row["Тариф"]:
-                        cols[3].markdown(row["Тариф"], unsafe_allow_html=True)
-                    else:
-                        cols[3].write(row["Тариф"])
-                    cols[4].write(row["Стоимость"])
-                st.markdown(f"**Итого: {total:.2f}**")
+                # Оформляем таблицу в рамке
+                table_html = f"""
+                <div style="border: 2px solid #ccc; border-radius: 8px; padding: 15px; margin: 10px 0; background: #fafafa;">
+                    <h4 style="margin-top:0;">Расчёт за {detail_date}</h4>
+                    <table style="width:100%; border-collapse: collapse; font-family: monospace;">
+                        <tr style="background: #e0e0e0;">
+                            <th style="text-align:left; padding: 8px;">Услуга</th>
+                            <th style="text-align:right; padding: 8px;">Предыдущее</th>
+                            <th style="text-align:right; padding: 8px;">Текущее</th>
+                            <th style="text-align:left; padding: 8px;">Тариф</th>
+                            <th style="text-align:right; padding: 8px;">Стоимость</th>
+                        </tr>
+                """
+                for row in detail_rows:
+                    table_html += f"""
+                        <tr>
+                            <td style="padding: 8px; border-top: 1px solid #ddd;">{row['Услуга']}</td>
+                            <td style="text-align:right; padding: 8px; border-top: 1px solid #ddd;">{row['Предыдущее']}</td>
+                            <td style="text-align:right; padding: 8px; border-top: 1px solid #ddd;">{row['Текущее']}</td>
+                            <td style="padding: 8px; border-top: 1px solid #ddd;">{row['Тариф']}</td>
+                            <td style="text-align:right; padding: 8px; border-top: 1px solid #ddd;">{row['Стоимость']}</td>
+                        </tr>
+                    """
+                table_html += f"""
+                        <tr style="font-weight: bold; background: #f0f0f0;">
+                            <td colspan="4" style="text-align:right; padding: 8px;">ИТОГО</td>
+                            <td style="text-align:right; padding: 8px;">{total:.2f}</td>
+                        </tr>
+                    </table>
+                """
 
-                # Кнопка копирования в текст
-                # Формируем текстовое представление
+                # Добавляем динамические тарифы снизу, если есть
+                if dynamic_tariffs:
+                    table_html += "<div style='margin-top:10px; font-size:0.9em; color:#555;'>"
+                    table_html += "<strong>Динам. тарифы:</strong><br>"
+                    for dt in dynamic_tariffs:
+                        table_html += f"ⓘ {dt}<br>"
+                    table_html += "</div>"
+
+                table_html += "</div>"
+                st.html(table_html)
+
+                # Текстовый отчёт (обновляется каждый раз при смене даты)
                 text_report = f"Детализация расчёта за {detail_date}\n"
                 text_report += "-" * 40 + "\n"
-                for _, row in detail_df.iterrows():
-                    tariff_text = row["Тариф"].replace('<details style="display:inline;"><summary style="cursor:pointer;">ⓘ</summary>', ' (').replace('</details>', ')')
+                for row in detail_rows:
+                    tariff_text = row['Тариф']
+                    if "Динам." in tariff_text:
+                        # Найдём полный тариф из dynamic_tariffs
+                        full_tariff = ""
+                        for dt in dynamic_tariffs:
+                            if row['Услуга'] in dt:
+                                full_tariff = dt.split(": ",1)[1]
+                                break
+                        tariff_text = f"Динам. ({full_tariff})" if full_tariff else "Динам."
                     text_report += f"{row['Услуга']}: {row['Предыдущее']} → {row['Текущее']} | Тариф: {tariff_text} | Стоимость: {row['Стоимость']}\n"
                 text_report += "-" * 40 + "\n"
                 text_report += f"Итого: {total:.2f}"
 
-                # Для копирования в буфер используем text_area с кнопкой (работает не везде, но на Streamlit Cloud ок)
-                st.text_area("Текстовый отчёт (скопируйте вручную)", value=text_report, height=200, key="detail_text_report")
-                # Кнопка для копирования (через JavaScript)
-                st.markdown("""
-                    <script>
-                    function copyToClipboard() {
-                        var text = document.getElementById("detail_text_report").value;
-                        navigator.clipboard.writeText(text).then(function() {
-                            alert('Отчёт скопирован в буфер обмена!');
-                        });
-                    }
-                    </script>
-                    <button onclick="copyToClipboard()">📋 Скопировать как текст</button>
-                """, unsafe_allow_html=True)
+                st.text_area("Текстовый отчёт (скопируйте вручную)", value=text_report, height=150, key="detail_text_report")
 
     except Exception as e:
         st.error(f"Ошибка при построении аналитики: {e}")
