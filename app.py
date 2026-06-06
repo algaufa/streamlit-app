@@ -211,7 +211,6 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
         mask = df_hist["Услуга"] == service
         if not mask.any():
             continue
-        # Сортируем только по дате (индексы сохранятся)
         idx_sorted = df_hist[mask].sort_values(by="Дата").index
         prev_meter = 0.0
         for i, idx in enumerate(idx_sorted):
@@ -334,66 +333,67 @@ else:
 # ====================== БОКОВАЯ ПАНЕЛЬ ======================
 with st.sidebar:
     st.markdown("## 🏠 Управление квартирами")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("➕", help="Добавить новую квартиру"):
-            new_id = f"flat_{str(uuid.uuid4())[:8]}"
-            new_name = f"Квартира {len(flat_options)+1}"
-            max_order = flats_df["Порядок"].max() if not flats_df.empty else 0
-            new_row = pd.DataFrame([{"ID": new_id, "Название": new_name, "Порядок": max_order+1}])
-            flats_df = pd.concat([flats_df, new_row], ignore_index=True)
-            flats_df["Порядок"] = flats_df["Порядок"].astype(int)
-            save_flats(flats_df)
-            init_flat_databases(new_id)
-            st.rerun()
-    with col2:
-        if st.button("✏️", help="Переименовать текущую квартиру"):
-            st.session_state.rename_flat = True
-    with col3:
-        if st.button("▲", help="Переместить квартиру вверх"):
-            idx = flats_df[flats_df["ID"] == flat_id].index[0]
-            if idx > 0:
-                flats_df.iloc[idx, flats_df.columns.get_loc("Порядок")] -= 1
-                flats_df.iloc[idx-1, flats_df.columns.get_loc("Порядок")] += 1
-                flats_df = flats_df.sort_values(by="Порядок").reset_index(drop=True)
-                flats_df["Порядок"] = range(1, len(flats_df)+1)
+    with st.expander("🏠 Квартиры (развернуть)", expanded=False):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            if st.button("➕", help="Добавить новую квартиру"):
+                new_id = f"flat_{str(uuid.uuid4())[:8]}"
+                new_name = f"Квартира {len(flat_options)+1}"
+                max_order = flats_df["Порядок"].max() if not flats_df.empty else 0
+                new_row = pd.DataFrame([{"ID": new_id, "Название": new_name, "Порядок": max_order+1}])
+                flats_df = pd.concat([flats_df, new_row], ignore_index=True)
+                flats_df["Порядок"] = flats_df["Порядок"].astype(int)
                 save_flats(flats_df)
+                init_flat_databases(new_id)
                 st.rerun()
-    with col4:
-        if st.button("▼", help="Переместить квартиру вниз"):
-            idx = flats_df[flats_df["ID"] == flat_id].index[0]
-            if idx < len(flats_df)-1:
-                flats_df.iloc[idx, flats_df.columns.get_loc("Порядок")] += 1
-                flats_df.iloc[idx+1, flats_df.columns.get_loc("Порядок")] -= 1
-                flats_df = flats_df.sort_values(by="Порядок").reset_index(drop=True)
-                flats_df["Порядок"] = range(1, len(flats_df)+1)
-                save_flats(flats_df)
-                st.rerun()
+        with col2:
+            if st.button("✏️", help="Переименовать текущую квартиру"):
+                st.session_state.rename_flat = True
+        with col3:
+            if st.button("▲", help="Переместить квартиру вверх"):
+                idx = flats_df[flats_df["ID"] == flat_id].index[0]
+                if idx > 0:
+                    flats_df.iloc[idx, flats_df.columns.get_loc("Порядок")] -= 1
+                    flats_df.iloc[idx-1, flats_df.columns.get_loc("Порядок")] += 1
+                    flats_df = flats_df.sort_values(by="Порядок").reset_index(drop=True)
+                    flats_df["Порядок"] = range(1, len(flats_df)+1)
+                    save_flats(flats_df)
+                    st.rerun()
+        with col4:
+            if st.button("▼", help="Переместить квартиру вниз"):
+                idx = flats_df[flats_df["ID"] == flat_id].index[0]
+                if idx < len(flats_df)-1:
+                    flats_df.iloc[idx, flats_df.columns.get_loc("Порядок")] += 1
+                    flats_df.iloc[idx+1, flats_df.columns.get_loc("Порядок")] -= 1
+                    flats_df = flats_df.sort_values(by="Порядок").reset_index(drop=True)
+                    flats_df["Порядок"] = range(1, len(flats_df)+1)
+                    save_flats(flats_df)
+                    st.rerun()
 
-    if st.button("🗑️ Удалить текущую квартиру", type="primary"):
-        flat_to_delete = flat_id
-        serv_file, hist_file, calc_file = get_flat_files(flat_to_delete)
-        notes_file = get_notes_file(flat_to_delete)
-        for f in [serv_file, hist_file, calc_file, notes_file]:
-            if os.path.exists(f):
-                os.remove(f)
-        flats_df = flats_df[flats_df["ID"] != flat_to_delete]
-        flats_df["Порядок"] = range(1, len(flats_df)+1)
-        save_flats(flats_df)
-        if not flats_df.empty:
-            st.session_state.selected_flat_id = flats_df.iloc[0]["ID"]
-        else:
-            st.session_state.selected_flat_id = None
-        st.rerun()
-
-    if st.session_state.get("rename_flat"):
-        current_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
-        new_name = st.text_input("Новое название", value=current_name, key="flat_new_name")
-        if st.button("Сохранить название"):
-            flats_df.loc[flats_df["ID"] == flat_id, "Название"] = new_name
+        if st.button("🗑️ Удалить текущую квартиру", type="primary"):
+            flat_to_delete = flat_id
+            serv_file, hist_file, calc_file = get_flat_files(flat_to_delete)
+            notes_file = get_notes_file(flat_to_delete)
+            for f in [serv_file, hist_file, calc_file, notes_file]:
+                if os.path.exists(f):
+                    os.remove(f)
+            flats_df = flats_df[flats_df["ID"] != flat_to_delete]
+            flats_df["Порядок"] = range(1, len(flats_df)+1)
             save_flats(flats_df)
-            st.session_state.rename_flat = False
+            if not flats_df.empty:
+                st.session_state.selected_flat_id = flats_df.iloc[0]["ID"]
+            else:
+                st.session_state.selected_flat_id = None
             st.rerun()
+
+        if st.session_state.get("rename_flat"):
+            current_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
+            new_name = st.text_input("Новое название", value=current_name, key="flat_new_name")
+            if st.button("Сохранить название"):
+                flats_df.loc[flats_df["ID"] == flat_id, "Название"] = new_name
+                save_flats(flats_df)
+                st.session_state.rename_flat = False
+                st.rerun()
 
     st.markdown("---")
     st.markdown("### 📝 Заметки")
@@ -497,7 +497,7 @@ with st.sidebar:
                     st.success("Настройки сохранены, история пересчитана!")
                     st.rerun()
 
-    with st.expander("📅 Управление тарифами (сетка и удаление)"):
+    with st.expander("📅 Управление тарифами (сетка и удаление)", expanded=False):
         sorted_tariffs = df_serv.sort_values(by=["Порядок", "Услуга", "Дата_начала"], ascending=[True, True, False]).reset_index(drop=True)
         st.dataframe(sorted_tariffs, use_container_width=True)
         st.markdown("**Удалить тариф:**")
@@ -518,7 +518,7 @@ with st.sidebar:
                         st.success("Тариф удалён, история пересчитана!")
                         st.rerun()
 
-    with st.expander("➕ Создать новую услугу"):
+    with st.expander("➕ Создать новую услугу", expanded=False):
         with st.form("add_new_service_form", clear_on_submit=True):
             new_name = st.text_input("Название новой услуги:")
             new_tariff_raw = st.text_input("Начальный тариф:")
@@ -548,7 +548,7 @@ with st.sidebar:
                         st.success("Услуга создана!")
                         st.rerun()
 
-    with st.expander("🗑️ Удаление услуг"):
+    with st.expander("🗑️ Удаление услуг", expanded=False):
         if unique_services:
             service_to_delete = st.selectbox("Удалить услугу полностью из системы:", unique_services, key="del_box")
             if st.button("❌ Удалить безвозвратно", type="primary"):
@@ -662,36 +662,42 @@ else:
         formatted_date = date_input.strftime("%Y-%m-%d")
         st.markdown("---")
         num_services = len(unique_services)
-        headers_cols = st.columns(num_services)
-        inputs_cols = st.columns(num_services)
+        # Используем по одной колонке на услугу, внутри – название и поле ввода
+        cols = st.columns(num_services)
         user_inputs = {}
         calculated_services = list(calc_config.keys())
 
         for idx, name in enumerate(unique_services):
-            active_tariff_str, _ = get_active_tariff_and_date(df_serv, name, formatted_date)
-            last_val = get_last_meter_value(df_hist, name)
-            _, s_color = get_service_meta(df_serv, name)
+            with cols[idx]:
+                active_tariff_str, _ = get_active_tariff_and_date(df_serv, name, formatted_date)
+                last_val = get_last_meter_value(df_hist, name)
+                _, s_color = get_service_meta(df_serv, name)
 
-            with headers_cols[idx]:
+                # Заголовок
                 if ":" in active_tariff_str:
                     tariff_html = "<b>Тариф:</b> Динам."
                 else:
                     tariff_html = f"<b>Тариф:</b> {active_tariff_str} ₽"
                 st.html(f"""
-                    <div style="height: 75px; border-left: 5px solid {s_color}; padding-left: 10px; margin-bottom: 0px;">
-                        <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
+                    <div style="margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
+                        <h5 style="margin: 0 0 2px 0; padding: 0; color: inherit;">{name}</h5>
                         <span style="font-size: 13px; color: inherit;">{tariff_html}</span>
                     </div>
                 """)
 
-            with inputs_cols[idx]:
+                # Поле ввода
                 if name in calculated_services:
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
                     st.text_input("Показания", value=source_names, disabled=True, key=f"disabled_{name}_{flat_id}")
                     new_val = last_val
                 else:
                     new_val = st.number_input(
-                        f"Ввод (было: {last_val})", min_value=0.0, value=last_val, step=1.0, key=f"input_{name}_{flat_id}"
+                        "Ввод",
+                        min_value=0.0,
+                        value=last_val,
+                        step=1.0,
+                        key=f"input_{name}_{flat_id}",
+                        label_visibility="collapsed"
                     )
                 user_inputs[name] = {"new": new_val, "old": last_val, "tariff": active_tariff_str}
 
@@ -707,7 +713,6 @@ else:
                 st.session_state.reset_warning = True
                 st.session_state.reset_services = reset_services
 
-            # Удаляем все записи за выбранную дату, чтобы избежать дублирования
             df_hist_updated = get_history(flat_id)
             df_hist_updated = df_hist_updated[df_hist_updated["Дата"] != formatted_date]
 
@@ -785,12 +790,22 @@ else:
                 date_to_delete = st.selectbox("Выберите дату для удаления всех записей:", available_dates, key="delete_date_select")
             with col2:
                 st.markdown("<br>", unsafe_allow_html=True)
+                # Защита от случайного удаления – двухэтапное подтверждение
+                if "confirm_delete_date" not in st.session_state:
+                    st.session_state.confirm_delete_date = None
+
                 if st.button("🗑️ Удалить записи за эту дату", key="delete_date_btn"):
-                    df_hist_updated = df_hist[df_hist["Дата"] != date_to_delete]
-                    df_hist_updated = recalc_all_sequential(df_hist_updated, df_serv, calc_config)
-                    save_history(df_hist_updated, flat_id)
-                    st.success(f"Записи за {date_to_delete} удалены и история пересчитана!")
-                    st.rerun()
+                    st.session_state.confirm_delete_date = date_to_delete
+
+                if st.session_state.confirm_delete_date == date_to_delete:
+                    st.warning(f"Вы уверены, что хотите удалить ВСЕ записи за {date_to_delete}?")
+                    if st.button("✅ Подтвердить удаление", key="confirm_delete_btn"):
+                        df_hist_updated = df_hist[df_hist["Дата"] != date_to_delete]
+                        df_hist_updated = recalc_all_sequential(df_hist_updated, df_serv, calc_config)
+                        save_history(df_hist_updated, flat_id)
+                        st.success(f"Записи за {date_to_delete} удалены и история пересчитана!")
+                        st.session_state.confirm_delete_date = None
+                        st.rerun()
 
         plot_data = pivot_sum[unique_services].copy()
         plot_data.columns = [col.split('(')[0].strip() for col in plot_data.columns]
