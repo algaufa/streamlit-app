@@ -197,7 +197,7 @@ def calculate_tiered_cost(consumption, tariff_str):
     except Exception:
         return 0.0, "Ошибка тарифа"
 
-# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлены сбросы и ВО) ---
+# --- ПОЛНЫЙ ПЕРЕСЧЁТ ---
 def recalc_all_sequential(df_hist, df_serv, calc_config):
     df_hist["Услуга"] = df_hist["Услуга"].astype(str).str.strip()
     calculated_services = [s.strip() for s in calc_config.keys()]
@@ -239,7 +239,6 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
             continue
         source_list = [s.strip() for s in source_list]
         dates = sorted(df_hist[df_hist["Услуга"] == calc_srv]["Дата"].unique())
-
         for date in dates:
             total_consumption = 0.0
             for src in source_list:
@@ -251,17 +250,15 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
             cost, recorded_tariff = calculate_tiered_cost(total_consumption, active_tariff)
             df_hist.loc[(df_hist["Услуга"] == calc_srv) & (df_hist["Дата"] == date), "Тариф"] = recorded_tariff
             df_hist.loc[(df_hist["Услуга"] == calc_srv) & (df_hist["Дата"] == date), "Сумма_руб"] = round(cost, 2)
-
         mask = df_hist["Услуга"] == calc_srv
         idx_sorted = df_hist[mask].sort_values(by="Дата").index
         cum_meter = 0.0
         for idx in idx_sorted:
             cum_meter += df_hist.at[idx, "Расход"]
             df_hist.at[idx, "Показания"] = cum_meter
-
     return df_hist
 
-def create_backup_zip(flat_id, flat_name):
+def create_backup_zip(flat_id):
     serv_file, hist_file, calc_file = get_flat_files(flat_id)
     notes_file = get_notes_file(flat_id)
     zip_buffer = io.BytesIO()
@@ -269,7 +266,7 @@ def create_backup_zip(flat_id, flat_name):
         for file, arcname in [(serv_file, "services.csv"), (hist_file, "history.csv"), (calc_file, "calc_config.csv")]:
             if os.path.exists(file):
                 zf.write(file, arcname=arcname)
-        # Имя квартиры уже сохранено отдельным файлом внутри ZIP, но мы также используем его для имени самого ZIP
+        flat_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
         zf.writestr("flat_info.txt", flat_name)
         if os.path.exists(notes_file):
             zf.write(notes_file, arcname="notes.txt")
@@ -280,6 +277,16 @@ init_flats()
 flats_df = get_flats()
 
 st.set_page_config(page_title="Учет ЖКХ", page_icon="🏠", layout="wide")
+
+# CSS для увеличения шрифта в selectbox
+st.markdown("""
+<style>
+div[data-baseweb="select"] > div {
+    font-size: 18px;
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
 
 flat_options = flats_df["ID"].tolist()
 if "selected_flat_id" not in st.session_state:
@@ -300,8 +307,6 @@ if selected_flat != st.session_state.selected_flat_id:
     st.rerun()
 
 flat_id = st.session_state.selected_flat_id
-current_flat_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
-st.title(f"📊 {current_flat_name}")
 
 df_serv = get_services(flat_id)
 df_hist = get_history(flat_id)
@@ -331,6 +336,7 @@ else:
     unique_services = []
 
 # ====================== БОКОВАЯ ПАНЕЛЬ ======================
+# (код боковой панели без изменений)
 with st.sidebar:
     st.markdown("## 🏠 Управление квартирами")
     with st.expander("🏠 Квартиры", expanded=False):
@@ -405,6 +411,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🛠️ Настройки услуг")
 
+    # (все expander'ы с настройками остаются без изменений)
     with st.expander("⚙️ Расчётные услуги (зависимые)", expanded=False):
         st.markdown("**Выберите услугу и задайте, от каких услуг она зависит.**")
         if not unique_services:
@@ -563,12 +570,11 @@ with st.sidebar:
     # --- Резервное копирование ---
     with st.expander("💾 Резервное копирование (бэкап)", expanded=False):
         st.markdown("**Скачать бэкап текущей квартиры:**")
-        # Используем текущее название квартиры в имени файла
-        safe_name = current_flat_name.replace(" ", "_")
-        zip_name = f"{safe_name}_{datetime.now():%Y%m%d_%H%M%S}.zip"
-        backup_data = create_backup_zip(flat_id, current_flat_name)
+        backup_data = create_backup_zip(flat_id)
+        current_flat_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
+        safe_name = "".join(c if c.isalnum() or c in " _-()" else "_" for c in current_flat_name).rstrip()
         st.download_button("📥 Скачать бэкап (ZIP)", data=backup_data,
-                           file_name=zip_name,
+                           file_name=f"{safe_name}_{datetime.now():%Y%m%d_%H%M%S}.zip",
                            mime="application/zip", use_container_width=True)
 
         st.markdown("---")
@@ -658,6 +664,7 @@ st.markdown("### 📝 Внести новые показания за перио
 if not unique_services:
     st.info("Список услуг пуст.")
 else:
+    # ... (остальной код ввода показаний без изменений)
     st.markdown("""
         <style>
         div[data-testid="stNumberInput"] input {
@@ -839,7 +846,7 @@ else:
         ).properties(width='container', height=400)
         st.altair_chart(chart, use_container_width=True)
 
-        # --- ДЕТАЛИЗАЦИЯ РАСЧЁТА (КОМПАКТНАЯ ТАБЛИЦА) ---
+        # --- ДЕТАЛИЗАЦИЯ РАСЧЁТА ---
         st.markdown("---")
         st.markdown("### 📋 Детализация расчёта")
         detail_date = st.selectbox("Выберите дату для просмотра деталей:", result_df.index.tolist(), key="detail_date_select")
@@ -896,7 +903,6 @@ else:
                     })
                     total += cost
 
-                # Компактная таблица с адаптивностью
                 st.markdown("""
                 <style>
                 .detail-table {
@@ -950,7 +956,6 @@ else:
                     html += f'<td class="number">{row["tariff"]}</td>'
                     html += f'<td class="number">{row["cost"]}</td>'
                     html += '</tr>'
-                # Итоговая строка с датой
                 html += f'<tr class="total-row"><td colspan="2" style="text-align:left;"><b>Дата: {detail_date}</b></td>'
                 html += f'<td colspan="3" style="text-align:right;"><b>Итого:</b></td>'
                 html += f'<td class="number"><b>{total:.2f}</b></td></tr>'
@@ -958,7 +963,6 @@ else:
 
                 st.markdown(html, unsafe_allow_html=True)
 
-                # Сноска с динамическими тарифами в одной строке
                 if dynamic_tariffs:
                     dynamic_html = '<div style="margin-top:10px; padding:8px 12px; border-radius:8px; border:1px solid #ccc; background:#fafafa; font-size:0.9em; color: #222;">'
                     dynamic_html += '<b>ⓘ Динамические тарифы:</b> '
