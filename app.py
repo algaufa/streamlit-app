@@ -193,7 +193,7 @@ def calculate_tiered_cost(consumption, tariff_str):
             consumed_in_tier = min(remaining, tier_capacity)
             total_cost += consumed_in_tier * rate
             remaining -= consumed_in_tier
-        return total_cost, tariff_str  # возвращаем исходный тариф как строку
+        return total_cost, tariff_str
     except Exception:
         return 0.0, "Ошибка тарифа"
 
@@ -395,13 +395,13 @@ with st.sidebar:
                 st.session_state.rename_flat = False
                 st.rerun()
 
-        # Заметки теперь внутри свёрнутого блока квартир
-        with st.expander("📝 Заметки", expanded=False):
-            notes_text = st.text_area("Заметки для этой квартиры",
-                                      value=get_notes(flat_id), height=200, key=f"notes_{flat_id}")
-            if st.button("💾 Сохранить заметки"):
-                save_notes(flat_id, notes_text)
-                st.success("Заметки сохранены!")
+    # Заметки (отдельный expander после квартир)
+    with st.expander("📝 Заметки", expanded=False):
+        notes_text = st.text_area("Заметки для этой квартиры",
+                                  value=get_notes(flat_id), height=200, key=f"notes_{flat_id}")
+        if st.button("💾 Сохранить заметки", key="save_notes_btn"):
+            save_notes(flat_id, notes_text)
+            st.success("Заметки сохранены!")
 
     st.markdown("---")
     st.markdown("### 🛠️ Настройки услуг")
@@ -671,16 +671,17 @@ else:
                 last_val = get_last_meter_value(df_hist, name)
                 _, s_color = get_service_meta(df_serv, name)
 
-                # Заголовок с цветной полосой
-                if ":" not in active_tariff_str:
-                    tariff_html = f"<b>Тариф:</b> {active_tariff_str} ₽"
+                # Компактный тариф: для динамического показываем "Динам." с полной подсказкой
+                if ":" in active_tariff_str:
+                    tariff_display = f'<span title="{active_tariff_str}">Динам.</span>'
                 else:
-                    tariff_html = f"<b>Тариф:</b> {active_tariff_str}"
+                    tariff_display = f"{active_tariff_str} ₽"
 
+                # Заголовок с фиксированной высотой для выравнивания
                 st.html(f"""
-                    <div style="margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
+                    <div style="min-height: 80px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                         <h5 style="margin: 0 0 2px 0; padding: 0; color: inherit;">{name}</h5>
-                        <span style="font-size: 13px; color: inherit;">{tariff_html}</span>
+                        <span style="font-size: 13px; color: inherit;"><b>Тариф:</b> {tariff_display}</span>
                     </div>
                 """)
 
