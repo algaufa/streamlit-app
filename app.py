@@ -172,7 +172,7 @@ def get_last_meter_value(df_hist, service_name):
 
 def calculate_tiered_cost(consumption, tariff_str):
     if ":" not in str(tariff_str):
-        return consumption * float(tariff_str), str(tariff_str)
+        return consumption * float(tariff_str), tariff_str
     total_cost = 0.0
     remaining = consumption
     try:
@@ -193,11 +193,11 @@ def calculate_tiered_cost(consumption, tariff_str):
             consumed_in_tier = min(remaining, tier_capacity)
             total_cost += consumed_in_tier * rate
             remaining -= consumed_in_tier
-        return total_cost, f"Динам. ({tariff_str})"
+        return total_cost, tariff_str  # возвращаем исходный тариф как строку
     except Exception:
         return 0.0, "Ошибка тарифа"
 
-# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлена ошибка 'index') ---
+# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлены сбросы и ВО) ---
 def recalc_all_sequential(df_hist, df_serv, calc_config):
     df_hist["Услуга"] = df_hist["Услуга"].astype(str).str.strip()
     calculated_services = [s.strip() for s in calc_config.keys()]
@@ -333,7 +333,7 @@ else:
 # ====================== БОКОВАЯ ПАНЕЛЬ ======================
 with st.sidebar:
     st.markdown("## 🏠 Управление квартирами")
-    with st.expander("🏠 Квартиры (развернуть)", expanded=False):
+    with st.expander("🏠 Квартиры", expanded=False):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             if st.button("➕", help="Добавить новую квартиру"):
@@ -395,14 +395,13 @@ with st.sidebar:
                 st.session_state.rename_flat = False
                 st.rerun()
 
-    st.markdown("---")
-    st.markdown("### 📝 Заметки")
-    with st.expander("📝 Заметки", expanded=False):
-        notes_text = st.text_area("Заметки для этой квартиры",
-                                  value=get_notes(flat_id), height=200, key=f"notes_{flat_id}")
-        if st.button("💾 Сохранить заметки"):
-            save_notes(flat_id, notes_text)
-            st.success("Заметки сохранены!")
+        # Заметки теперь внутри свёрнутого блока квартир
+        with st.expander("📝 Заметки", expanded=False):
+            notes_text = st.text_area("Заметки для этой квартиры",
+                                      value=get_notes(flat_id), height=200, key=f"notes_{flat_id}")
+            if st.button("💾 Сохранить заметки"):
+                save_notes(flat_id, notes_text)
+                st.success("Заметки сохранены!")
 
     st.markdown("---")
     st.markdown("### 🛠️ Настройки услуг")
@@ -662,7 +661,6 @@ else:
         formatted_date = date_input.strftime("%Y-%m-%d")
         st.markdown("---")
         num_services = len(unique_services)
-        # Используем по одной колонке на услугу, внутри – название и поле ввода
         cols = st.columns(num_services)
         user_inputs = {}
         calculated_services = list(calc_config.keys())
@@ -673,11 +671,12 @@ else:
                 last_val = get_last_meter_value(df_hist, name)
                 _, s_color = get_service_meta(df_serv, name)
 
-                # Заголовок
-                if ":" in active_tariff_str:
-                    tariff_html = "<b>Тариф:</b> Динам."
-                else:
+                # Заголовок с цветной полосой
+                if ":" not in active_tariff_str:
                     tariff_html = f"<b>Тариф:</b> {active_tariff_str} ₽"
+                else:
+                    tariff_html = f"<b>Тариф:</b> {active_tariff_str}"
+
                 st.html(f"""
                     <div style="margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                         <h5 style="margin: 0 0 2px 0; padding: 0; color: inherit;">{name}</h5>
@@ -688,16 +687,16 @@ else:
                 # Поле ввода
                 if name in calculated_services:
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
-                    st.text_input("Показания", value=source_names, disabled=True, key=f"disabled_{name}_{flat_id}")
+                    st.text_input("", value=source_names, disabled=True,
+                                  label_visibility="collapsed", key=f"disabled_{name}_{flat_id}")
                     new_val = last_val
                 else:
                     new_val = st.number_input(
-                        "Ввод",
+                        f"Ввод (было: {last_val})",
                         min_value=0.0,
                         value=last_val,
                         step=1.0,
-                        key=f"input_{name}_{flat_id}",
-                        label_visibility="collapsed"
+                        key=f"input_{name}_{flat_id}"
                     )
                 user_inputs[name] = {"new": new_val, "old": last_val, "tariff": active_tariff_str}
 
@@ -790,7 +789,6 @@ else:
                 date_to_delete = st.selectbox("Выберите дату для удаления всех записей:", available_dates, key="delete_date_select")
             with col2:
                 st.markdown("<br>", unsafe_allow_html=True)
-                # Защита от случайного удаления – двухэтапное подтверждение
                 if "confirm_delete_date" not in st.session_state:
                     st.session_state.confirm_delete_date = None
 
