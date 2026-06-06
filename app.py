@@ -682,7 +682,6 @@ else:
 
                 # Заголовок с цветной полосой и фиксированной высотой
                 if ":" in active_tariff_str:
-                    # Динамический тариф с интерактивной подсказкой через <details>
                     tariff_display = f'''Динам. <details style="display:inline;">
                         <summary style="display:inline; cursor:pointer; color:#555;">ⓘ</summary>
                         <span style="font-size:0.9em;">{active_tariff_str}</span>
@@ -700,6 +699,8 @@ else:
 
                 # Поле ввода
                 if name in calculated_services:
+                    # Скрытый текст для выравнивания высоты с number_input
+                    st.markdown("<span style='visibility:hidden; font-size:14px;'>Ввод (было: 0.0)</span>", unsafe_allow_html=True)
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
                     st.text_input("", value=source_names, disabled=True,
                                   label_visibility="collapsed", key=f"disabled_{name}_{flat_id}")
