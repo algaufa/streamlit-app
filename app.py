@@ -261,7 +261,7 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
 
     return df_hist
 
-def create_backup_zip(flat_id):
+def create_backup_zip(flat_id, flat_name):
     serv_file, hist_file, calc_file = get_flat_files(flat_id)
     notes_file = get_notes_file(flat_id)
     zip_buffer = io.BytesIO()
@@ -269,7 +269,7 @@ def create_backup_zip(flat_id):
         for file, arcname in [(serv_file, "services.csv"), (hist_file, "history.csv"), (calc_file, "calc_config.csv")]:
             if os.path.exists(file):
                 zf.write(file, arcname=arcname)
-        flat_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
+        # Имя квартиры уже сохранено отдельным файлом внутри ZIP, но мы также используем его для имени самого ZIP
         zf.writestr("flat_info.txt", flat_name)
         if os.path.exists(notes_file):
             zf.write(notes_file, arcname="notes.txt")
@@ -563,9 +563,12 @@ with st.sidebar:
     # --- Резервное копирование ---
     with st.expander("💾 Резервное копирование (бэкап)", expanded=False):
         st.markdown("**Скачать бэкап текущей квартиры:**")
-        backup_data = create_backup_zip(flat_id)
+        # Используем текущее название квартиры в имени файла
+        safe_name = current_flat_name.replace(" ", "_")
+        zip_name = f"{safe_name}_{datetime.now():%Y%m%d_%H%M%S}.zip"
+        backup_data = create_backup_zip(flat_id, current_flat_name)
         st.download_button("📥 Скачать бэкап (ZIP)", data=backup_data,
-                           file_name=f"backup_{flat_id}_{datetime.now():%Y%m%d_%H%M%S}.zip",
+                           file_name=zip_name,
                            mime="application/zip", use_container_width=True)
 
         st.markdown("---")
