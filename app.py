@@ -658,8 +658,7 @@ else:
     # CSS для выравнивания высоты полей ввода
     st.markdown("""
         <style>
-        div[data-testid="stNumberInput"] input,
-        div[data-testid="stTextInput"] input {
+        div[data-testid="stNumberInput"] input {
             height: 40px;
         }
         </style>
@@ -689,23 +688,24 @@ else:
                 else:
                     tariff_display = active_tariff_str
 
+                # Для зависимых услуг добавляем перечень источников
+                if name in calculated_services:
+                    source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
+                    dep_info = f"<br><small>Зависит от: {source_names}</small>"
+                else:
+                    dep_info = ""
+
                 html_block = f"""
                 <div style="height: 120px; overflow-y: auto; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                     <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
                     <span style="font-size: 13px; color: inherit;"><b>Тариф:</b> {tariff_display}</span>
+                    {dep_info}
                 </div>
                 """
                 st.html(html_block)
 
-                # Поле ввода
-                if name in calculated_services:
-                    # Скрытый текст для выравнивания высоты с number_input
-                    st.markdown("<span style='visibility:hidden; font-size:14px;'>Ввод (было: 0.0)</span>", unsafe_allow_html=True)
-                    source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
-                    st.text_input("", value=source_names, disabled=True,
-                                  label_visibility="collapsed", key=f"disabled_{name}_{flat_id}")
-                    new_val = last_val
-                else:
+                # Поле ввода – только для независимых услуг
+                if name not in calculated_services:
                     new_val = st.number_input(
                         f"Ввод (было: {last_val})",
                         min_value=0.0,
@@ -713,6 +713,10 @@ else:
                         step=1.0,
                         key=f"input_{name}_{flat_id}"
                     )
+                else:
+                    # Для зависимых услуг поле ввода не показываем, но значение нужно для внутреннего использования
+                    new_val = last_val
+
                 user_inputs[name] = {"new": new_val, "old": last_val, "tariff": active_tariff_str}
 
         st.markdown("---")
