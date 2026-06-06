@@ -197,7 +197,7 @@ def calculate_tiered_cost(consumption, tariff_str):
     except Exception:
         return 0.0, "Ошибка тарифа"
 
-# --- ПОЛНЫЙ ПЕРЕСЧЁТ ---
+# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлены сбросы и ВО) ---
 def recalc_all_sequential(df_hist, df_serv, calc_config):
     df_hist["Услуга"] = df_hist["Услуга"].astype(str).str.strip()
     calculated_services = [s.strip() for s in calc_config.keys()]
@@ -262,13 +262,15 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
     return df_hist
 
 def create_backup_zip(flat_id):
+    """Создаёт ZIP-архив, в котором файлы называются services.csv, history.csv, calc_config.csv"""
     serv_file, hist_file, calc_file = get_flat_files(flat_id)
     notes_file = get_notes_file(flat_id)
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file in [serv_file, hist_file, calc_file]:
+        # Записываем файлы под универсальными именами
+        for file, arcname in [(serv_file, "services.csv"), (hist_file, "history.csv"), (calc_file, "calc_config.csv")]:
             if os.path.exists(file):
-                zf.write(file, arcname=os.path.basename(file))
+                zf.write(file, arcname=arcname)
         flat_name = flats_df[flats_df["ID"] == flat_id]["Название"].values[0]
         zf.writestr("flat_info.txt", flat_name)
         if os.path.exists(notes_file):
@@ -561,7 +563,7 @@ with st.sidebar:
                 st.warning("Удалено.")
                 st.rerun()
 
-    # --- Резервное копирование ---
+    # --- Резервное копирование (исправленный ZIP) ---
     with st.expander("💾 Резервное копирование (бэкап)", expanded=False):
         st.markdown("**Скачать бэкап текущей квартиры:**")
         backup_data = create_backup_zip(flat_id)
@@ -581,15 +583,22 @@ with st.sidebar:
                 if st.button("🔄 Восстановить из ZIP"):
                     try:
                         with zipfile.ZipFile(uploaded_zip, "r") as zf:
+                            # Теперь в архиве всегда services.csv, history.csv, calc_config.csv
                             required = ["services.csv", "history.csv", "calc_config.csv"]
                             if not all(f in zf.namelist() for f in required):
                                 st.error("В архиве отсутствуют необходимые файлы (services.csv, history.csv, calc_config.csv)")
                             else:
+                                # Извлекаем в текущую директорию
                                 zf.extractall(path=".")
+                                # Переименовываем под текущий flat_id
                                 for f in required:
                                     if os.path.exists(f):
                                         target = f.replace(".csv", f"_{flat_id}.csv")
-                                        os.replace(f, target)
+                                        # Если файл с целевым именем уже существует, заменяем
+                                        if os.path.exists(target):
+                                            os.remove(target)
+                                        os.rename(f, target)
+                                # Восстанавливаем название квартиры
                                 if "flat_info.txt" in zf.namelist():
                                     with open("flat_info.txt", "r", encoding="utf-8-sig") as f:
                                         new_name = f.read().strip()
@@ -597,10 +606,15 @@ with st.sidebar:
                                         flats_df = get_flats()
                                         flats_df.loc[flats_df["ID"] == flat_id, "Название"] = new_name
                                         save_flats(flats_df)
+                                # Восстанавливаем заметки
                                 if "notes.txt" in zf.namelist():
-                                    with open("notes.txt", "r", encoding="utf-8-sig") as f:
-                                        notes_text = f.read()
-                                    save_notes(flat_id, notes_text)
+                                    notes_path = "notes.txt"
+                                    if os.path.exists(notes_path):
+                                        with open(notes_path, "r", encoding="utf-8-sig") as f:
+                                            notes_text = f.read()
+                                        save_notes(flat_id, notes_text)
+                                        os.remove(notes_path)
+                                # Пересчитываем историю
                                 df_serv = get_services(flat_id)
                                 df_hist = get_history(flat_id)
                                 calc_config = get_calc_config(flat_id)
@@ -777,7 +791,7 @@ else:
             with col1:
                 date_to_delete = st.selectbox("Выберите дату для удаления всех записей:", available_dates, key="delete_date_select")
             with col2:
-                st.markdown("<br>", unsafe_allow_html=True)  # выравнивание
+                st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🗑️ Удалить записи за эту дату", key="delete_date_btn"):
                     df_hist_updated = df_hist[df_hist["Дата"] != date_to_delete]
                     df_hist_updated = recalc_all_sequential(df_hist_updated, df_serv, calc_config)
