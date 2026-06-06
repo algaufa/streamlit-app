@@ -395,7 +395,6 @@ with st.sidebar:
                 st.session_state.rename_flat = False
                 st.rerun()
 
-    # Заметки (отдельный expander после квартир)
     with st.expander("📝 Заметки", expanded=False):
         notes_text = st.text_area("Заметки для этой квартиры",
                                   value=get_notes(flat_id), height=200, key=f"notes_{flat_id}")
@@ -671,25 +670,34 @@ else:
                 last_val = get_last_meter_value(df_hist, name)
                 _, s_color = get_service_meta(df_serv, name)
 
-                # Компактный тариф: для динамического показываем "Динам." с полной подсказкой
+                # Компактный тариф: "Динам." с полной подсказкой + ссылка для просмотра
                 if ":" in active_tariff_str:
-                    tariff_display = f'<span title="{active_tariff_str}">Динам.</span>'
+                    tariff_display = (
+                        f'<span title="{active_tariff_str}">Динам.</span> '
+                        f'<a style="font-size:12px; text-decoration:none; color:inherit;" '
+                        f'href="javascript:void(0);" onclick="alert(\'{active_tariff_str}\');">ⓘ</a>'
+                    )
                 else:
                     tariff_display = f"{active_tariff_str} ₽"
 
-                # Заголовок с фиксированной высотой для выравнивания
+                # Заголовок с фиксированной высотой
                 st.html(f"""
-                    <div style="min-height: 80px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
+                    <div style="min-height: 85px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                         <h5 style="margin: 0 0 2px 0; padding: 0; color: inherit;">{name}</h5>
                         <span style="font-size: 13px; color: inherit;"><b>Тариф:</b> {tariff_display}</span>
                     </div>
                 """)
 
-                # Поле ввода
+                # Поле ввода: для зависимых услуг используем number_input(disabled=True) для одинаковой высоты
                 if name in calculated_services:
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
-                    st.text_input("", value=source_names, disabled=True,
-                                  label_visibility="collapsed", key=f"disabled_{name}_{flat_id}")
+                    st.number_input(
+                        source_names,
+                        value=last_val,
+                        disabled=True,
+                        key=f"disabled_{name}_{flat_id}",
+                        label_visibility="visible"
+                    )
                     new_val = last_val
                 else:
                     new_val = st.number_input(
