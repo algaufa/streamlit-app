@@ -395,7 +395,6 @@ with st.sidebar:
                 st.session_state.rename_flat = False
                 st.rerun()
 
-    # Заметки (отдельный expander после квартир)
     with st.expander("📝 Заметки", expanded=False):
         notes_text = st.text_area("Заметки для этой квартиры",
                                   value=get_notes(flat_id), height=200, key=f"notes_{flat_id}")
@@ -661,25 +660,35 @@ else:
         formatted_date = date_input.strftime("%Y-%m-%d")
         st.markdown("---")
         num_services = len(unique_services)
-        cols = st.columns(num_services)
+        # Два ряда колонок: заголовки и поля ввода
+        header_cols = st.columns(num_services)
+        input_cols = st.columns(num_services)
         user_inputs = {}
         calculated_services = list(calc_config.keys())
 
+        # Стиль для выравнивания высоты полей ввода
+        st.markdown("""
+            <style>
+            div[data-testid="stNumberInput"] input,
+            div[data-testid="stTextInput"] input {
+                height: 40px;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        # Заголовки
         for idx, name in enumerate(unique_services):
-            with cols[idx]:
+            with header_cols[idx]:
                 active_tariff_str, _ = get_active_tariff_and_date(df_serv, name, formatted_date)
                 last_val = get_last_meter_value(df_hist, name)
                 _, s_color = get_service_meta(df_serv, name)
 
-                # Заголовок с цветной полосой и тарифом
                 if ":" in active_tariff_str:
-                    # Многострочный компактный тариф для ЭЭ
                     lines = [f"{t.strip().split(':')[0]}: {t.strip().split(':')[1]} ₽" for t in active_tariff_str.split(",")]
                     tariff_html = "<br>".join(lines)
                 else:
                     tariff_html = f"{active_tariff_str} ₽"
 
-                # Используем контейнер с фиксированной высотой для заголовка
                 st.html(f"""
                     <div style="min-height: 95px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                         <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
@@ -687,9 +696,12 @@ else:
                     </div>
                 """)
 
-                # Поле ввода
+        # Поля ввода
+        for idx, name in enumerate(unique_services):
+            with input_cols[idx]:
+                active_tariff_str, _ = get_active_tariff_and_date(df_serv, name, formatted_date)
+                last_val = get_last_meter_value(df_hist, name)
                 if name in calculated_services:
-                    # Для зависимых услуг placeholder с источниками
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
                     st.text_input("", value=source_names, disabled=True,
                                   label_visibility="collapsed", key=f"disabled_{name}_{flat_id}")
