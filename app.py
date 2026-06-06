@@ -655,12 +655,21 @@ st.markdown("### 📝 Внести новые показания за перио
 if not unique_services:
     st.info("Список услуг пуст.")
 else:
+    # CSS для выравнивания высоты полей ввода
+    st.markdown("""
+        <style>
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stTextInput"] input {
+            height: 40px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     with st.form("main_meters_top_form"):
         date_input = st.date_input("Выбор расчетного периода (Дата)", datetime.now())
         formatted_date = date_input.strftime("%Y-%m-%d")
         st.markdown("---")
         num_services = len(unique_services)
-        # Используем отдельные колонки для каждой услуги (заголовок + поле ввода вместе)
         cols = st.columns(num_services)
         user_inputs = {}
         calculated_services = list(calc_config.keys())
@@ -673,24 +682,15 @@ else:
 
                 # Заголовок с цветной полосой
                 if ":" in active_tariff_str:
-                    # Динамический тариф: короткая строка "Динам." + кнопка ⓘ
-                    tariff_display = (
-                        '<span title="' + active_tariff_str + '">Динам.</span>'
-                        ' <span style="cursor:pointer; font-size:0.8em; color:#555;" '
-                        f'onclick="var x=document.getElementById(\'dynamic_{flat_id}_{idx}\'); '
-                        f'if(x.style.display==\'none\'){{x.style.display=\'block\';}} else {{x.style.display=\'none\';}}">ⓘ</span>'
-                    )
-                    tariff_details = f'<div id="dynamic_{flat_id}_{idx}" style="display:none; font-size:0.85em; margin-top: 2px;">{active_tariff_str}</div>'
+                    # Динамический тариф: слово «Динам.» с title-подсказкой
+                    tariff_display = f'<span title="{active_tariff_str}">Динам.</span>'
                 else:
-                    tariff_display = f"{active_tariff_str}"
-                    tariff_details = ""
+                    tariff_display = active_tariff_str
 
-                # Блок заголовка (фиксированная высота для выравнивания)
                 html_block = f"""
                 <div style="min-height: 80px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
                     <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
                     <span style="font-size: 13px; color: inherit;"><b>Тариф:</b> {tariff_display}</span>
-                    {tariff_details}
                 </div>
                 """
                 st.html(html_block)
