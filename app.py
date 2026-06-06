@@ -836,7 +836,7 @@ else:
         ).properties(width='container', height=400)
         st.altair_chart(chart, use_container_width=True)
 
-        # --- ДЕТАЛИЗАЦИЯ РАСЧЁТА (СТИЛИЗОВАННАЯ ТАБЛИЦА) ---
+        # --- ДЕТАЛИЗАЦИЯ РАСЧЁТА (КОМПАКТНАЯ ТАБЛИЦА С ЗАКРУГЛЕНИЯМИ) ---
         st.markdown("---")
         st.markdown("### 📋 Детализация расчёта")
         detail_date = st.selectbox("Выберите дату для просмотра деталей:", result_df.index.tolist(), key="detail_date_select")
@@ -844,9 +844,9 @@ else:
             df_detail = get_history(flat_id)
             df_detail = df_detail[df_detail["Дата"] == detail_date]
             if not df_detail.empty:
-                # Строим таблицу
                 table_rows = []
                 total = 0.0
+                dynamic_tariffs = []  # для отображения внизу
                 for srv in unique_services:
                     srv_df = df_detail[df_detail["Услуга"] == srv]
                     if not srv_df.empty:
@@ -857,23 +857,20 @@ else:
                         cost = float(row_data["Сумма_руб"])
                         tariff_str = str(row_data["Тариф"])
                     else:
-                        # Если услуги нет в выбранную дату – все нули
                         prev = 0.0
                         current = 0.0
                         consumption = 0.0
                         cost = 0.0
                         tariff_str = "0.0"
 
-                    # Определяем, является ли услуга расчётной (зависимой)
                     is_calculated = srv in calculated_services
 
-                    # Форматируем тариф
                     if ":" in tariff_str:
-                        tariff_display = f'<span title="{tariff_str}">Динам. ⓘ</span>'
+                        tariff_display = "Динам. ⓘ"
+                        dynamic_tariffs.append(f"{srv}: {tariff_str}")
                     else:
                         tariff_display = tariff_str
 
-                    # Для зависимой услуги скрываем предыдущее/текущее
                     if is_calculated:
                         prev_display = "—"
                         current_display = "—"
@@ -881,7 +878,7 @@ else:
                         prev_display = f"{prev:.2f}"
                         current_display = f"{current:.2f}"
 
-                    change_display = f"{consumption:.2f}" if not is_calculated else f"{consumption:.2f}"
+                    change_display = f"{consumption:.2f}"
                     cost_display = f"{cost:.2f}"
 
                     table_rows.append({
@@ -895,24 +892,35 @@ else:
                     })
                     total += cost
 
-                # CSS для читаемости в обеих темах и выравнивание чисел
+                # CSS для компактной таблицы с закруглениями и выравниванием
                 st.markdown("""
                 <style>
                 .detail-table {
                     width: 100%;
-                    border-collapse: collapse;
+                    border-collapse: separate; /* чтобы сработал border-radius */
+                    border-spacing: 0;
                     border: 1px solid #ccc;
+                    border-radius: 10px;
+                    overflow: hidden;
+                    font-size: 0.95rem;
                 }
                 .detail-table th, .detail-table td {
-                    padding: 8px 12px;
-                    border: 1px solid #ddd;
-                    text-align: left;
+                    padding: 6px 8px;
+                    border-bottom: 1px solid #ddd;
+                    text-align: right; /* все числовые колонки справа */
                 }
                 .detail-table th {
                     background-color: #f0f0f0;
+                    font-weight: bold;
                 }
-                .detail-table .number {
+                .detail-table th:first-child, .detail-table td:first-child {
+                    text-align: left; /* название услуги слева */
+                }
+                .detail-table th:last-child, .detail-table td:last-child {
                     text-align: right;
+                }
+                .detail-table tr:last-child td {
+                    border-bottom: none;
                 }
                 @media (prefers-color-scheme: dark) {
                     .detail-table th {
@@ -926,26 +934,38 @@ else:
                         border-color: #555;
                     }
                 }
+                @media only screen and (max-width: 600px) {
+                    .detail-table {
+                        font-size: 0.8rem;
+                    }
+                    .detail-table th, .detail-table td {
+                        padding: 4px 5px;
+                    }
+                }
                 </style>
                 """, unsafe_allow_html=True)
 
-                # Строим HTML таблицы
                 html = '<table class="detail-table">'
                 html += '<tr><th>Услуга</th><th>Предыдущее</th><th>Текущее</th><th>Изменение</th><th>Тариф</th><th>Сумма</th></tr>'
                 for row in table_rows:
                     html += '<tr>'
                     html += f'<td>{row["service"]}</td>'
-                    html += f'<td class="number">{row["prev"]}</td>'
-                    html += f'<td class="number">{row["current"]}</td>'
-                    html += f'<td class="number">{row["change"]}</td>'
+                    html += f'<td>{row["prev"]}</td>'
+                    html += f'<td>{row["current"]}</td>'
+                    html += f'<td>{row["change"]}</td>'
                     html += f'<td>{row["tariff"]}</td>'
-                    html += f'<td class="number">{row["cost"]}</td>'
+                    html += f'<td>{row["cost"]}</td>'
                     html += '</tr>'
-                # Итоговая строка
-                html += f'<tr><td colspan="5" style="text-align:right;"><b>Итого:</b></td><td class="number"><b>{total:.2f}</b></td></tr>'
+                html += f'<tr><td colspan="5" style="text-align:right;"><b>Итого:</b></td><td style="text-align:right;"><b>{total:.2f}</b></td></tr>'
                 html += '</table>'
 
                 st.markdown(html, unsafe_allow_html=True)
+
+                # Строка с расшифровкой динамических тарифов
+                if dynamic_tariffs:
+                    st.markdown("**ⓘ Динамические тарифы:**")
+                    for dt in dynamic_tariffs:
+                        st.markdown(f"- {dt}")
 
     except Exception as e:
         st.error(f"Ошибка при построении аналитики: {e}")
