@@ -197,7 +197,7 @@ def calculate_tiered_cost(consumption, tariff_str):
     except Exception:
         return 0.0, "Ошибка тарифа"
 
-# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлены сбросы и ВО) ---
+# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлена ошибка 'index') ---
 def recalc_all_sequential(df_hist, df_serv, calc_config):
     df_hist["Услуга"] = df_hist["Услуга"].astype(str).str.strip()
     calculated_services = [s.strip() for s in calc_config.keys()]
@@ -211,8 +211,8 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
         mask = df_hist["Услуга"] == service
         if not mask.any():
             continue
-        # Сортируем по дате и дополнительно по индексу для стабильности
-        idx_sorted = df_hist[mask].sort_values(by=["Дата", df_hist.index.name or "index"]).index
+        # Сортируем только по дате (индексы сохранятся)
+        idx_sorted = df_hist[mask].sort_values(by="Дата").index
         prev_meter = 0.0
         for i, idx in enumerate(idx_sorted):
             meter = float(df_hist.at[idx, "Показания"])
@@ -254,7 +254,7 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
             df_hist.loc[(df_hist["Услуга"] == calc_srv) & (df_hist["Дата"] == date), "Сумма_руб"] = round(cost, 2)
 
         mask = df_hist["Услуга"] == calc_srv
-        idx_sorted = df_hist[mask].sort_values(by=["Дата", df_hist.index.name or "index"]).index
+        idx_sorted = df_hist[mask].sort_values(by="Дата").index
         cum_meter = 0.0
         for idx in idx_sorted:
             cum_meter += df_hist.at[idx, "Расход"]
