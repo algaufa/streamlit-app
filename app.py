@@ -688,10 +688,13 @@ else:
                 else:
                     tariff_display = active_tariff_str
 
-                # Для зависимых услуг добавляем перечень источников
+                # Для зависимых услуг добавляем скрытую информацию о зависимостях
                 if name in calculated_services:
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
-                    dep_info = f"<br><small>Зависит от: {source_names}</small>"
+                    dep_info = f'''<details style="display:inline; margin-top:2px;">
+                        <summary style="display:inline; cursor:pointer; color:#555; font-size:13px;">📋</summary>
+                        <span style="font-size:0.9em;">{source_names}</span>
+                    </details>'''
                 else:
                     dep_info = ""
 
