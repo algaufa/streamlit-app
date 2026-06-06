@@ -688,11 +688,11 @@ else:
                 else:
                     tariff_display = active_tariff_str
 
-                # Для зависимых услуг добавляем скрытую информацию о зависимостях
+                # Для зависимых услуг добавляем скрытую информацию о зависимостях (иконка ⓘ)
                 if name in calculated_services:
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
                     dep_info = f'''<details style="display:inline; margin-top:2px;">
-                        <summary style="display:inline; cursor:pointer; color:#555; font-size:13px;">📋</summary>
+                        <summary style="display:inline; cursor:pointer; color:#555; font-size:13px;">ⓘ</summary>
                         <span style="font-size:0.9em;">{source_names}</span>
                     </details>'''
                 else:
@@ -841,18 +841,92 @@ else:
         ).properties(width='container', height=400)
         st.altair_chart(chart, use_container_width=True)
 
+        # --- ДЕТАЛИЗАЦИЯ РАСЧЁТА ---
         st.markdown("---")
-        st.markdown("**Текущие показания счетчиков:**")
-        current_meters = []
-        for srv in unique_services:
-            last_val = get_last_meter_value(df_hist, srv)
-            if not df_hist.empty and srv in df_hist["Услуга"].values:
-                last_date = df_hist[df_hist["Услуга"] == srv].sort_values("Дата", ascending=False).iloc[0]["Дата"]
-            else:
-                last_date = "Нет данных"
-            short_name = srv.split('(')[0].strip()
-            current_meters.append({"Услуга": short_name, "Последние пок.": last_val, "Дата обновления": last_date})
-        st.dataframe(pd.DataFrame(current_meters), use_container_width=True)
+        st.markdown("### 📋 Детализация расчёта")
+        detail_date = st.selectbox("Выберите дату для просмотра деталей:", result_df.index.tolist(), key="detail_date_select")
+        if detail_date:
+            # Загружаем актуальную историю
+            df_detail = get_history(flat_id)
+            df_detail = df_detail[df_detail["Дата"] == detail_date]
+            if not df_detail.empty:
+                # Строим таблицу
+                detail_rows = []
+                total = 0.0
+                for srv in unique_services:
+                    srv_df = df_detail[df_detail["Услуга"] == srv]
+                    if not srv_df.empty:
+                        row_data = srv_df.iloc[0]
+                        current = row_data["Показания"]
+                        consumption = row_data["Расход"]
+                        prev = current - consumption if not pd.isna(consumption) else 0.0
+                        tariff_str = row_data["Тариф"]
+                        cost = row_data["Сумма_руб"]
+                    else:
+                        # Если услуги нет в выбранную дату, берём последние доступные данные
+                        last_row = df_detail[df_detail["Услуга"] == srv].tail(1)
+                        if not last_row.empty:
+                            current = last_row["Показания"].values[0]
+                            prev = current  # если нет расхода, предыдущее = текущее
+                            tariff_str = last_row["Тариф"].values[0]
+                            cost = 0.0
+                        else:
+                            current = prev = tariff_str = cost = 0.0
+                    # Форматируем тариф
+                    if ":" in str(tariff_str):
+                        tariff_display = f'Динам. <details style="display:inline;"><summary style="cursor:pointer;">ⓘ</summary>{tariff_str}</details>'
+                    else:
+                        tariff_display = tariff_str
+                    detail_rows.append({
+                        "Услуга": srv,
+                        "Предыдущее": round(prev, 2),
+                        "Текущее": round(current, 2),
+                        "Тариф": tariff_display,
+                        "Стоимость": round(cost, 2)
+                    })
+                    total += cost
+
+                detail_df = pd.DataFrame(detail_rows)
+                # Убираем колонку Тариф как HTML, отрендерим отдельно через st.markdown
+                st.write("**Дата:**", detail_date)
+                st.write("**Показания и стоимость:**")
+                for _, row in detail_df.iterrows():
+                    cols = st.columns([3,1,1,2,1])
+                    cols[0].write(row["Услуга"])
+                    cols[1].write(row["Предыдущее"])
+                    cols[2].write(row["Текущее"])
+                    # Тариф с возможным details
+                    if "Динам." in row["Тариф"]:
+                        cols[3].markdown(row["Тариф"], unsafe_allow_html=True)
+                    else:
+                        cols[3].write(row["Тариф"])
+                    cols[4].write(row["Стоимость"])
+                st.markdown(f"**Итого: {total:.2f}**")
+
+                # Кнопка копирования в текст
+                # Формируем текстовое представление
+                text_report = f"Детализация расчёта за {detail_date}\n"
+                text_report += "-" * 40 + "\n"
+                for _, row in detail_df.iterrows():
+                    tariff_text = row["Тариф"].replace('<details style="display:inline;"><summary style="cursor:pointer;">ⓘ</summary>', ' (').replace('</details>', ')')
+                    text_report += f"{row['Услуга']}: {row['Предыдущее']} → {row['Текущее']} | Тариф: {tariff_text} | Стоимость: {row['Стоимость']}\n"
+                text_report += "-" * 40 + "\n"
+                text_report += f"Итого: {total:.2f}"
+
+                # Для копирования в буфер используем text_area с кнопкой (работает не везде, но на Streamlit Cloud ок)
+                st.text_area("Текстовый отчёт (скопируйте вручную)", value=text_report, height=200, key="detail_text_report")
+                # Кнопка для копирования (через JavaScript)
+                st.markdown("""
+                    <script>
+                    function copyToClipboard() {
+                        var text = document.getElementById("detail_text_report").value;
+                        navigator.clipboard.writeText(text).then(function() {
+                            alert('Отчёт скопирован в буфер обмена!');
+                        });
+                    }
+                    </script>
+                    <button onclick="copyToClipboard()">📋 Скопировать как текст</button>
+                """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Ошибка при построении аналитики: {e}")
