@@ -660,47 +660,42 @@ else:
         formatted_date = date_input.strftime("%Y-%m-%d")
         st.markdown("---")
         num_services = len(unique_services)
-        # Два ряда колонок: заголовки и поля ввода
-        header_cols = st.columns(num_services)
-        input_cols = st.columns(num_services)
+        # Используем отдельные колонки для каждой услуги (заголовок + поле ввода вместе)
+        cols = st.columns(num_services)
         user_inputs = {}
         calculated_services = list(calc_config.keys())
 
-        # Стиль для выравнивания высоты полей ввода
-        st.markdown("""
-            <style>
-            div[data-testid="stNumberInput"] input,
-            div[data-testid="stTextInput"] input {
-                height: 40px;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-
-        # Заголовки
         for idx, name in enumerate(unique_services):
-            with header_cols[idx]:
+            with cols[idx]:
                 active_tariff_str, _ = get_active_tariff_and_date(df_serv, name, formatted_date)
                 last_val = get_last_meter_value(df_hist, name)
                 _, s_color = get_service_meta(df_serv, name)
 
+                # Заголовок с цветной полосой
                 if ":" in active_tariff_str:
-                    lines = [f"{t.strip().split(':')[0]}: {t.strip().split(':')[1]} ₽" for t in active_tariff_str.split(",")]
-                    tariff_html = "<br>".join(lines)
+                    # Динамический тариф: короткая строка "Динам." + кнопка ⓘ
+                    tariff_display = (
+                        '<span title="' + active_tariff_str + '">Динам.</span>'
+                        ' <span style="cursor:pointer; font-size:0.8em; color:#555;" '
+                        f'onclick="var x=document.getElementById(\'dynamic_{flat_id}_{idx}\'); '
+                        f'if(x.style.display==\'none\'){{x.style.display=\'block\';}} else {{x.style.display=\'none\';}}">ⓘ</span>'
+                    )
+                    tariff_details = f'<div id="dynamic_{flat_id}_{idx}" style="display:none; font-size:0.85em; margin-top: 2px;">{active_tariff_str}</div>'
                 else:
-                    tariff_html = f"{active_tariff_str} ₽"
+                    tariff_display = f"{active_tariff_str}"
+                    tariff_details = ""
 
-                st.html(f"""
-                    <div style="min-height: 95px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
-                        <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
-                        <span style="font-size: 13px; color: inherit; line-height: 1.3;"><b>Тариф:</b><br>{tariff_html}</span>
-                    </div>
-                """)
+                # Блок заголовка (фиксированная высота для выравнивания)
+                html_block = f"""
+                <div style="min-height: 80px; margin-bottom: 5px; border-left: 5px solid {s_color}; padding-left: 10px;">
+                    <h5 style="margin: 0 0 4px 0; padding: 0; color: inherit;">{name}</h5>
+                    <span style="font-size: 13px; color: inherit;"><b>Тариф:</b> {tariff_display}</span>
+                    {tariff_details}
+                </div>
+                """
+                st.html(html_block)
 
-        # Поля ввода
-        for idx, name in enumerate(unique_services):
-            with input_cols[idx]:
-                active_tariff_str, _ = get_active_tariff_and_date(df_serv, name, formatted_date)
-                last_val = get_last_meter_value(df_hist, name)
+                # Поле ввода
                 if name in calculated_services:
                     source_names = ", ".join([s.split('(')[0].strip() for s in calc_config[name]])
                     st.text_input("", value=source_names, disabled=True,
