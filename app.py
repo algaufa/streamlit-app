@@ -197,7 +197,7 @@ def calculate_tiered_cost(consumption, tariff_str):
     except Exception:
         return 0.0, "Ошибка тарифа"
 
-# --- ПОЛНЫЙ ПЕРЕСЧЁТ ---
+# --- ПОЛНЫЙ ПЕРЕСЧЁТ (исправлены сбросы и ВО) ---
 def recalc_all_sequential(df_hist, df_serv, calc_config):
     df_hist["Услуга"] = df_hist["Услуга"].astype(str).str.strip()
     calculated_services = [s.strip() for s in calc_config.keys()]
@@ -239,6 +239,7 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
             continue
         source_list = [s.strip() for s in source_list]
         dates = sorted(df_hist[df_hist["Услуга"] == calc_srv]["Дата"].unique())
+
         for date in dates:
             total_consumption = 0.0
             for src in source_list:
@@ -250,12 +251,14 @@ def recalc_all_sequential(df_hist, df_serv, calc_config):
             cost, recorded_tariff = calculate_tiered_cost(total_consumption, active_tariff)
             df_hist.loc[(df_hist["Услуга"] == calc_srv) & (df_hist["Дата"] == date), "Тариф"] = recorded_tariff
             df_hist.loc[(df_hist["Услуга"] == calc_srv) & (df_hist["Дата"] == date), "Сумма_руб"] = round(cost, 2)
+
         mask = df_hist["Услуга"] == calc_srv
         idx_sorted = df_hist[mask].sort_values(by="Дата").index
         cum_meter = 0.0
         for idx in idx_sorted:
             cum_meter += df_hist.at[idx, "Расход"]
             df_hist.at[idx, "Показания"] = cum_meter
+
     return df_hist
 
 def create_backup_zip(flat_id):
@@ -843,7 +846,7 @@ else:
             if not df_detail.empty:
                 table_rows = []
                 total = 0.0
-                dynamic_tariffs = []  # для сносок
+                dynamic_tariffs = []
 
                 for srv in unique_services:
                     srv_df = df_detail[df_detail["Услуга"] == srv]
@@ -864,7 +867,7 @@ else:
                     is_calc = srv in calculated_services
 
                     if ":" in tariff_str:
-                        tariff_display = f'Динам. ⓘ'
+                        tariff_display = 'Динам. ⓘ'
                         dynamic_tariffs.append(f"{srv}: {tariff_str}")
                     else:
                         tariff_display = tariff_str
@@ -890,7 +893,7 @@ else:
                     })
                     total += cost
 
-                # Компактная таблица с закруглёнными углами
+                # Компактная таблица с адаптивностью
                 st.markdown("""
                 <style>
                 .detail-table {
@@ -902,29 +905,32 @@ else:
                     box-shadow: 0 0 10px rgba(0,0,0,0.05);
                     font-size: 14px;
                 }
-                .detail-table th, .detail-table td {
-                    padding: 6px 8px;
-                    border-bottom: 1px solid var(--border-color, #ddd);
-                    text-align: left;
-                    white-space: nowrap;
-                }
                 .detail-table th {
-                    background-color: var(--header-bg, #f0f0f0);
-                    color: inherit;
+                    background-color: #e0e0e0;
+                    color: #222;
                     font-weight: 600;
+                    padding: 6px 8px;
+                    border-bottom: 1px solid #ccc;
+                }
+                .detail-table td {
+                    padding: 6px 8px;
+                    border-bottom: 1px solid #ddd;
+                    color: inherit;
+                    text-align: left;
                 }
                 .detail-table .number {
                     text-align: right;
                 }
-                .detail-table td {
-                    color: inherit;
+                .total-row td {
+                    background-color: #e0e0e0;
+                    color: #222;
+                    font-weight: 600;
+                    border-bottom: none;
                 }
-                @media (prefers-color-scheme: dark) {
-                    .detail-table th {
-                        background-color: #333;
-                    }
-                    .detail-table td {
-                        border-color: #555;
+                @media (max-width: 600px) {
+                    .detail-table th, .detail-table td {
+                        padding: 4px 5px;
+                        font-size: 12px;
                     }
                 }
                 </style>
@@ -941,20 +947,19 @@ else:
                     html += f'<td class="number">{row["tariff"]}</td>'
                     html += f'<td class="number">{row["cost"]}</td>'
                     html += '</tr>'
-                # Итоговая строка с датой слева
-                html += f'<tr><td colspan="2" style="text-align:left;"><b>{detail_date}</b></td>'
+                # Итоговая строка с датой
+                html += f'<tr class="total-row"><td colspan="2" style="text-align:left;"><b>Дата: {detail_date}</b></td>'
                 html += f'<td colspan="3" style="text-align:right;"><b>Итого:</b></td>'
                 html += f'<td class="number"><b>{total:.2f}</b></td></tr>'
                 html += '</table>'
 
                 st.markdown(html, unsafe_allow_html=True)
 
-                # Сноска с динамическими тарифами в рамке
+                # Сноска с динамическими тарифами в одной строке
                 if dynamic_tariffs:
-                    dynamic_html = '<div style="margin-top:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--border-color, #ddd); background:var(--header-bg, #fafafa); font-size:0.9em;">'
-                    dynamic_html += '<b>ⓘ Динамические тарифы:</b><br>'
-                    for dt in dynamic_tariffs:
-                        dynamic_html += f'{dt}<br>'
+                    dynamic_html = '<div style="margin-top:10px; padding:8px 12px; border-radius:8px; border:1px solid #ccc; background:#fafafa; font-size:0.9em; color: #222;">'
+                    dynamic_html += '<b>ⓘ Динамические тарифы:</b> '
+                    dynamic_html += '; '.join(dynamic_tariffs)
                     dynamic_html += '</div>'
                     st.markdown(dynamic_html, unsafe_allow_html=True)
 
